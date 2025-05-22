@@ -5,25 +5,25 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from users.serializers import UserSerializer, UserLoginSerializer
+from user.serializers import UserSerializer, UserLoginSerializer
 
 User = get_user_model()
 
 
 class RegisterUserView(APIView):
     """
-    API endpoint for user registration.
-    Allows new users to create an account.
+    Endpoint for user registration.
+    Creates new user and returns authentication token.
     """
     def post(self, request):
         serializer = UserSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
-            token, created = Token.objects.get_or_create(user=user)
+            token = Token.objects.create(user=user)
             return Response(
                 {
-                    "user": UserSerializer(user).data,
-                    "token": token.key
+                    'user': UserSerializer(user).data,
+                    'token': token.key
                 },
                 status=status.HTTP_201_CREATED
             )
@@ -32,8 +32,8 @@ class RegisterUserView(APIView):
 
 class LoginUserView(APIView):
     """
-    API endpoint for user login.
-    Returns authentication token on successful login.
+    Endpoint for user authentication.
+    Returns token for valid credentials.
     """
     def post(self, request):
         serializer = UserLoginSerializer(data=request.data)
@@ -43,13 +43,13 @@ class LoginUserView(APIView):
                 password=serializer.validated_data['password']
             )
             if user:
-                token, created = Token.objects.get_or_create(user=user)
+                token, _ = Token.objects.get_or_create(user=user)
                 return Response({
-                    "user": UserSerializer(user).data,
-                    "token": token.key
+                    'user': UserSerializer(user).data,
+                    'token': token.key
                 })
             return Response(
-                {"error": "Invalid credentials"},
+                {'error': 'Invalid credentials'},
                 status=status.HTTP_401_UNAUTHORIZED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -57,8 +57,8 @@ class LoginUserView(APIView):
 
 class ManageUserView(APIView):
     """
-    API endpoint for managing user profile.
-    Requires authentication.
+    Endpoint for authenticated users to manage their profile.
+    Supports retrieving, updating and deleting user data.
     """
     permission_classes = [IsAuthenticated]
 
@@ -68,7 +68,18 @@ class ManageUserView(APIView):
         return Response(serializer.data)
 
     def put(self, request):
-        """Update current user's profile"""
+        """Update user profile (full update)"""
+        serializer = UserSerializer(
+            request.user,
+            data=request.data
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request):
+        """Partial update of user profile"""
         serializer = UserSerializer(
             request.user,
             data=request.data,
@@ -77,9 +88,9 @@ class ManageUserView(APIView):
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_ERROR)
 
     def delete(self, request):
-        """Delete current user's account"""
+        """Delete user account"""
         request.user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
